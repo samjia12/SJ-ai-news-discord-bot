@@ -250,6 +250,12 @@ It returns (ephemeral):
 
 ## Operations
 
+### Runtime modes (recommended)
+
+- ✅ **Production / long-running:** run with Docker (`docker compose up -d`).
+- ✅ **Development / debugging:** run with `npm run dev`.
+- ❌ Do **not** keep `npm run dev` running forever as a background service (it is a dev watch process).
+
 ### Common Docker commands
 
 #### Option A: Use the prebuilt image (recommended)
@@ -567,6 +573,12 @@ docker compose logs -f
 ---
 
 ## 运维
+
+### 运行方式建议
+
+- ✅ **长期运行 / 生产环境：** 用 Docker（`docker compose up -d`）后台常驻
+- ✅ **开发/调试：** 用 `npm run dev`
+- ❌ 不建议把 `npm run dev` 当成长期后台服务（它是开发 watch 模式）
 
 停止：
 

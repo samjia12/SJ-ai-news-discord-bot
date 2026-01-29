@@ -8,7 +8,11 @@ export function openDb(path) {
 }
 
 function migrate(db) {
-  db.exec(`
+  // Simple migration strategy using PRAGMA user_version.
+  const v = db.pragma('user_version', { simple: true });
+
+  if (v < 1) {
+    db.exec(`
     CREATE TABLE IF NOT EXISTS guilds (
       guild_id TEXT PRIMARY KEY,
       allowed INTEGER NOT NULL DEFAULT 0,
@@ -23,6 +27,7 @@ function migrate(db) {
       provider TEXT NOT NULL,
       api_key TEXT NOT NULL,
       output_language TEXT NOT NULL DEFAULT 'en',
+      fallback_on_error INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -57,7 +62,22 @@ function migrate(db) {
       items_new INTEGER NOT NULL,
       error TEXT NULL
     );
-  `);
+    `);
+
+    db.pragma('user_version = 1');
+    return;
+  }
+
+  // v1 -> v2 migrations (if needed)
+  if (v < 2) {
+    // Add fallback_on_error column to existing secrets table
+    try {
+      db.exec(`ALTER TABLE secrets ADD COLUMN fallback_on_error INTEGER NOT NULL DEFAULT 1`);
+    } catch {
+      // ignore if column already exists
+    }
+    db.pragma('user_version = 2');
+  }
 }
 
 export function nowIso() {

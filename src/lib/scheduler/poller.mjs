@@ -32,7 +32,7 @@ export function startPoller({ db, discordSend }) {
         .all();
 
       const cfg = db
-        .prepare(`SELECT provider, api_key, output_language FROM secrets ORDER BY updated_at DESC LIMIT 1`)
+        .prepare(`SELECT provider, api_key, output_language, fallback_on_error FROM secrets ORDER BY updated_at DESC LIMIT 1`)
         .get();
 
       for (const g of guilds) {
@@ -79,14 +79,44 @@ export function startPoller({ db, discordSend }) {
             incDaily(db, { guildId, date });
           } catch (e) {
             const msg = String(e?.message || e);
-            recordSent(db, {
-              guildId,
-              itemKey: it.key,
-              itemLink: it.link,
-              publishedAt: it.isoDate || it.pubDate,
-              status: 'error',
-              error: msg,
-            });
+
+            // If translation fails, optionally fall back to posting the original text.
+            const fallback = cfg?.fallback_on_error !== 0;
+            if (fallback) {
+              try {
+                const out = truncate(it.text, maxChars);
+                await discordSend({ channelId, content: out });
+
+                recordSent(db, {
+                  guildId,
+                  itemKey: it.key,
+                  itemLink: it.link,
+                  publishedAt: it.isoDate || it.pubDate,
+                  status: 'ok',
+                  error: `translation_failed_fallback: ${msg}`.slice(0, 500),
+                });
+                incDaily(db, { guildId, date });
+              } catch (e2) {
+                const msg2 = String(e2?.message || e2);
+                recordSent(db, {
+                  guildId,
+                  itemKey: it.key,
+                  itemLink: it.link,
+                  publishedAt: it.isoDate || it.pubDate,
+                  status: 'error',
+                  error: `translation_failed_and_fallback_send_failed: ${msg}; send_error: ${msg2}`.slice(0, 900),
+                });
+              }
+            } else {
+              recordSent(db, {
+                guildId,
+                itemKey: it.key,
+                itemLink: it.link,
+                publishedAt: it.isoDate || it.pubDate,
+                status: 'error',
+                error: msg,
+              });
+            }
           }
         }
       }

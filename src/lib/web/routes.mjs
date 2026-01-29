@@ -13,11 +13,12 @@ export function buildWebRoutes({ db, getPoller }) {
 
   // --- Admin API (Bearer ADMIN_PASSWORD) ---
   r.get('/api/config', requireAdminPassword, (_req, res) => {
-    const row = db.prepare(`SELECT provider, api_key, output_language, updated_at FROM secrets ORDER BY updated_at DESC LIMIT 1`).get();
+    const row = db.prepare(`SELECT provider, api_key, output_language, fallback_on_error, updated_at FROM secrets ORDER BY updated_at DESC LIMIT 1`).get();
     res.json({
       provider: row?.provider ?? 'openai',
       apiKey: row?.api_key ?? '',
       outputLanguage: row?.output_language ?? 'en',
+      fallbackOnError: row ? row.fallback_on_error !== 0 : true,
       updatedAt: row?.updated_at ?? null,
     });
   });
@@ -26,6 +27,7 @@ export function buildWebRoutes({ db, getPoller }) {
     const provider = String(req.body?.provider || 'openai').toLowerCase();
     const apiKey = String(req.body?.apiKey || '').trim();
     const outputLanguage = String(req.body?.outputLanguage || 'en').trim();
+    const fallbackOnError = req.body?.fallbackOnError !== false; // default true
 
     if (!apiKey) {
       return res.status(400).json({ error: 'apiKey is required' });
@@ -33,9 +35,9 @@ export function buildWebRoutes({ db, getPoller }) {
 
     const now = nowIso();
     db.prepare(
-      `INSERT INTO secrets (provider, api_key, output_language, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(provider, apiKey, outputLanguage, now, now);
+      `INSERT INTO secrets (provider, api_key, output_language, fallback_on_error, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(provider, apiKey, outputLanguage, fallbackOnError ? 1 : 0, now, now);
 
     res.json({ ok: true });
   });
@@ -184,6 +186,12 @@ function renderIndexHtml() {
       <input id="lang" value="en" />
       <div class="small">Examples: <code>en</code>, <code>zh</code>, <code>ja</code>…</div>
 
+      <label style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+        <input id="fallbackOnError" type="checkbox" checked />
+        <span>Fallback to original text if translation fails</span>
+      </label>
+      <div class="small">Recommended ON for reliability (will still respect 700-char truncation).</div>
+
       <button onclick="loadConfig()">Load</button>
       <button onclick="saveConfig()">Save</button>
       <div id="cfgStatus" class="small"></div>
@@ -261,6 +269,7 @@ function renderIndexHtml() {
     document.getElementById('provider').value = data.provider;
     document.getElementById('apiKey').value = data.apiKey;
     document.getElementById('lang').value = data.outputLanguage;
+    document.getElementById('fallbackOnError').checked = (data.fallbackOnError !== false);
     document.getElementById('cfgStatus').textContent = data.updatedAt ? ('Loaded (updated: ' + data.updatedAt + ')') : 'Loaded (no config saved yet)';
   }
 
@@ -269,6 +278,7 @@ function renderIndexHtml() {
       provider: document.getElementById('provider').value,
       apiKey: document.getElementById('apiKey').value,
       outputLanguage: document.getElementById('lang').value,
+      fallbackOnError: document.getElementById('fallbackOnError').checked,
     };
     const res = await fetch('/api/config', {
       method: 'POST',
