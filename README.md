@@ -250,6 +250,26 @@ It returns (ephemeral):
 
 ## Operations
 
+### Common Docker commands
+
+```bash
+# Start
+docker compose up -d
+
+# Status
+docker compose ps
+
+# Logs
+docker compose logs -f
+
+# Restart (after editing .env)
+docker compose restart
+
+# Stop
+docker compose down
+```
+
+
 ### Stop
 
 ```bash

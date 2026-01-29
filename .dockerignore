@@ -1,0 +1,26 @@
+# Node
+node_modules
+npm-debug.log*
+
+# Runtime data
+.data
+/data
+logs
+out
+inputs
+state
+memory
+reports
+
+# Local env
+.env
+
+# macOS
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# Misc
+canvas
