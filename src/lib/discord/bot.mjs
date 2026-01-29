@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, PermissionsBitField, REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, PermissionsBitField, REST, Routes, SlashCommandBuilder, Events } from 'discord.js';
 import { nowIso, todayUtcDate } from '../db/db.mjs';
 
 function parseAllowlist() {
@@ -20,10 +20,10 @@ export function startDiscordBot({ db }) {
   });
 
   const ready = new Promise((resolve) => {
-    client.once('ready', () => resolve());
+    client.once(Events.ClientReady, () => resolve());
   });
 
-  client.once('ready', async () => {
+  client.once(Events.ClientReady, async () => {
     console.log(`[discord] logged in as ${client.user.tag}`);
 
     // Register slash commands for allowlisted guilds (fast propagation).
