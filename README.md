@@ -67,38 +67,93 @@ Once installed in a Discord server (guild), the bot:
 
 ### 1) Create/prepare a Discord application & bot
 
-In the Discord Developer Portal:
+You will do this in the **Discord Developer Portal**:
 
-- Enable **applications.commands** (needed for slash commands)
-- Give the bot minimal permissions:
-  - View Channels
-  - Send Messages
-  - Embed Links (optional)
+- Open: https://discord.com/developers/applications
+- Click **New Application** → name it (e.g. `News Bot`) → **Create**
 
-> You do **not** need Message Content Intent because we do not read normal messages.
+#### 1.1 Create the bot user + copy the token
 
-**Copy/paste checklist**
+1) Left sidebar → **Bot**
+2) Click **Add Bot** → confirm
+3) Under **Token** → click **Reset Token** → copy the token
 
-- Bot token: keep it safe, you will set it as an env var.
+> Keep this token secret. You will set it in `.env` as `DISCORD_BOT_TOKEN`.
+
+#### 1.2 Enable what you need (and avoid what you don’t)
+
+We only use **slash commands** and outbound sending.
+
+- ✅ We DO need: **applications.commands** (slash commands)
+- ✅ We DO need to be able to **send messages** to a channel
+- ❌ We do NOT need to read normal message content
+
+So in **Bot → Privileged Gateway Intents**:
+- **Message Content Intent**: **OFF** (not needed)
+- **Server Members Intent**: **OFF** (not needed)
+- **Presence Intent**: **OFF**
+
+#### 1.3 Recommended server permissions (minimum)
+
+When inviting the bot to a server, grant:
+- ✅ View Channels
+- ✅ Send Messages
+- ✅ Read Message History (optional, but helpful for troubleshooting)
+- ✅ Embed Links (optional)
+
+---
+
+### Copy/paste checklist
+
+- [ ] Bot token copied
+- [ ] Intents left OFF (Message Content / Members / Presence)
+- [ ] You know the target guild ID(s) for `ALLOWLIST_GUILD_IDS`
 
 ---
 
 ### 2) Invite the bot to your server
 
-Generate an invite URL using **OAuth2 → URL Generator**:
+In the Discord Developer Portal:
 
-**Scopes**
-- `bot`
-- `applications.commands`
+1) Left sidebar → **OAuth2** → **URL Generator**
 
-**Bot Permissions**
-- View Channels
-- Send Messages
-- (optional) Embed Links
+#### 2.1 Scopes
 
-Invite the bot into your guild.
+Check:
+- ✅ `bot`
+- ✅ `applications.commands`
 
-> Important: the bot will only work in guilds listed in `ALLOWLIST_GUILD_IDS`.
+> `applications.commands` is required for `/set_channel` and `/status`.
+
+#### 2.2 Bot permissions
+
+Select the minimum permissions:
+- ✅ View Channels
+- ✅ Send Messages
+- ✅ Read Message History (optional)
+- ✅ Embed Links (optional)
+
+#### 2.3 Generate invite URL
+
+- Copy the generated URL at the bottom
+- Open it in your browser
+- Choose the target server (guild) → **Authorize**
+
+> Important: the bot will only operate in guilds listed in `ALLOWLIST_GUILD_IDS`.
+
+#### 2.4 Get the Guild ID (for allowlist)
+
+On Discord (desktop):
+1) User Settings → Advanced → enable **Developer Mode**
+2) Right-click your server name → **Copy Server ID**
+3) Put it into `.env` as `ALLOWLIST_GUILD_IDS=<guildId>`
+
+Copy/paste example:
+
+```bash
+# Example (replace with your server id)
+ALLOWLIST_GUILD_IDS=1437322703358136405
+```
 
 ---
 
@@ -278,22 +333,81 @@ MIT. See [LICENSE](./LICENSE).
 
 ### 1）准备 Discord Bot
 
-在 Discord Developer Portal：
+在 **Discord Developer Portal** 操作：
 
-- 需要 `applications.commands`（支持 slash command）
-- 最小权限：
-  - View Channels
-  - Send Messages
-  - （可选）Embed Links
+- 打开：https://discord.com/developers/applications
+- 点 **New Application** → 填名字（例如 `News Bot`）→ **Create**
 
-> 不需要 Message Content Intent（因为不读普通消息）。
+#### 1.1 创建 Bot 并复制 Token
+
+1) 左侧 **Bot**
+2) 点 **Add Bot** → 确认
+3) 在 **Token** 区域点 **Reset Token** → 复制 token
+
+> token 只会显示一次，请妥善保存。稍后写入 `.env` 的 `DISCORD_BOT_TOKEN`。
+
+#### 1.2 Intents（建议全部关闭）
+
+本项目只用 **Slash Command + 发消息**，不读普通消息内容。
+
+在 **Bot → Privileged Gateway Intents**：
+- Message Content Intent：**关闭**（不需要）
+- Server Members Intent：**关闭**（不需要）
+- Presence Intent：**关闭**（不需要）
+
+#### 1.3 邀请时的最小权限
+
+邀请 bot 进服务器时建议授予：
+- ✅ View Channels
+- ✅ Send Messages
+- （可选）Read Message History
+- （可选）Embed Links
+
+---
+
+### 快速检查清单（可复制粘贴）
+
+- [ ] 已复制 bot token
+- [ ] Intents 保持关闭（Message Content / Members / Presence）
+- [ ] 已准备好要写入 `ALLOWLIST_GUILD_IDS` 的服务器 ID
 
 ### 2）邀请 bot 进入你的服务器
 
-OAuth2 URL Generator：
+在 Discord Developer Portal：
 
-- Scopes：`bot` + `applications.commands`
-- Bot Permissions：View Channels + Send Messages (+ Embed Links)
+1) 左侧 **OAuth2** → **URL Generator**
+
+#### 2.1 Scopes
+
+勾选：
+- ✅ `bot`
+- ✅ `applications.commands`
+
+> `applications.commands` 是 `/set_channel` 和 `/status` 必需的。
+
+#### 2.2 Bot Permissions
+
+建议最小权限：
+- ✅ View Channels
+- ✅ Send Messages
+- （可选）Read Message History
+- （可选）Embed Links
+
+#### 2.3 生成并打开邀请链接
+
+- 复制页面底部生成的 URL
+- 用浏览器打开 → 选择你的服务器 → Authorize
+
+#### 2.4 获取 Server ID（用于白名单）
+
+Discord 桌面端：
+1) 用户设置 → 高级 → 打开 **开发者模式**
+2) 右键你的服务器名 → **复制服务器 ID**
+3) 写入 `.env`：
+
+```bash
+ALLOWLIST_GUILD_IDS=1437322703358136405
+```
 
 ### 3）用 Docker 启动
 
