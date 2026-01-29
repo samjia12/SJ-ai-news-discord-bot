@@ -25,20 +25,9 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// Placeholder dashboard route (v1 will expand). For now, just prove web server works.
-app.get('/', (_req, res) => {
-  res.type('html').send(`<!doctype html>
-<html>
-<head><meta charset="utf-8"/><title>SJ AI News Bot</title></head>
-<body style="font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px;">
-  <h1>SJ AI News Discord Bot</h1>
-  <p>Dashboard is not implemented yet (code milestone 1 focuses on Discord slash commands).</p>
-  <ul>
-    <li>Health: <a href="/health">/health</a></li>
-  </ul>
-</body>
-</html>`);
-});
+import { buildWebRoutes } from './lib/web/routes.mjs';
+
+app.use('/', buildWebRoutes({ db }));
 
 app.listen(PORT, () => {
   console.log(`[web] listening on http://0.0.0.0:${PORT}`);
