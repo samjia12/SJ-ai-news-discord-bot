@@ -20,5 +20,8 @@
     "fast-xml-parser": "^5.3.3",
     "he": "^1.2.0",
     "rss-parser": "^3.13.0"
+  },
+  "overrides": {
+    "undici": "^6.23.0"
   }
 }
