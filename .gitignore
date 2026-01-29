@@ -28,8 +28,6 @@ SOUL.md
 TOOLS.md
 USER.md
 prompts/
-scripts/*
-!scripts/x_monitor_1024ex.mjs
-!scripts/x_monitor_1024ex_send.mjs
+scripts/
 tmp_1024ex_replies.json
 SJ-ai-news-discord-bot/

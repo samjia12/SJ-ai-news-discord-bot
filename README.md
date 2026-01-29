@@ -163,7 +163,7 @@ Copy/paste example:
 
 ```bash
 # Example (replace with your server id)
-ALLOWLIST_GUILD_IDS=1437322703358136405
+ALLOWLIST_GUILD_IDS=123456789012345678
 ```
 
 ---
@@ -466,7 +466,7 @@ Discord 桌面端：
 3) 写入 `.env`：
 
 ```bash
-ALLOWLIST_GUILD_IDS=1437322703358136405
+ALLOWLIST_GUILD_IDS=123456789012345678
 ```
 
 ---
