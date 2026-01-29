@@ -35,6 +35,12 @@ A self-hosted, **multi-guild** Discord bot that pulls AI news from a fixed RSS s
 
 ## What it does
 
+### Use case
+
+Example: Post translated AI news into the **#ai-crypto-news** channel of the 1024EX Discord server:
+- Invite: https://discord.gg/1024EX
+- Target channel: `#ai-crypto-news`
+
 Once installed in a Discord server (guild), the bot:
 
 1. Polls the RSS feed every 20 minutes.
@@ -327,6 +333,12 @@ MIT. See [LICENSE](./LICENSE).
 > 英文版在前面，中文版在后面；两者内容一致。
 
 ## 这是什么
+
+### 使用场景
+
+示例：把翻译后的 AI 新闻推送到 1024EX Discord 服务器的 **#ai-crypto-news** 频道：
+- 邀请链接：https://discord.gg/1024EX
+- 目标频道：`#ai-crypto-news`
 
 这是一个自部署（本地 Docker）的 **多服务器（multi-guild）** Discord Bot：
 
