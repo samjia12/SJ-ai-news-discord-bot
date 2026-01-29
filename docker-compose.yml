@@ -1,0 +1,13 @@
+services:
+  app:
+    image: sj-ai-news-discord-bot:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
