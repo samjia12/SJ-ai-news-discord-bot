@@ -10,7 +10,14 @@ export function startPoller({ db, discordSend }) {
 
   console.log(`[poller] rss=${rssUrl} interval=${intervalMin}m maxPerGuild=${maxPerGuild} maxChars=${maxChars}`);
 
-  const tick = async () => {
+  let running = false;
+
+  const tick = async ({ reason } = { reason: 'scheduled' }) => {
+    if (running) {
+      return { ok: false, skipped: true, reason: 'already running' };
+    }
+
+    running = true;
     const startedAt = nowIso();
     let itemsFetched = 0;
     let itemsNew = 0;
@@ -92,14 +99,22 @@ export function startPoller({ db, discordSend }) {
          VALUES (?, ?, ?, ?, ?)`
       ).run(startedAt, finishedAt, itemsFetched, itemsNew, error);
 
-      if (error) console.warn(`[poller] error: ${error}`);
-      else console.log(`[poller] ok: fetched=${itemsFetched} newAttempts=${itemsNew}`);
+      if (error) console.warn(`[poller] error (${reason}): ${error}`);
+      else console.log(`[poller] ok (${reason}): fetched=${itemsFetched} newAttempts=${itemsNew}`);
+
+      running = false;
     }
+
+    return { ok: !error, startedAt, itemsFetched, itemsNew, error };
   };
 
   // start soon, then interval
-  setTimeout(tick, 2_000);
-  setInterval(tick, intervalMin * 60_000);
+  setTimeout(() => tick({ reason: 'startup' }), 2_000);
+  setInterval(() => tick({ reason: 'scheduled' }), intervalMin * 60_000);
+
+  return {
+    runNow: () => tick({ reason: 'manual' }),
+  };
 }
 
 function truncate(s, maxChars) {

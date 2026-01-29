@@ -3,7 +3,7 @@ import { requireAdminPassword } from './auth.mjs';
 import { nowIso } from '../db/db.mjs';
 import { translateText } from '../translator/translator.mjs';
 
-export function buildWebRoutes({ db }) {
+export function buildWebRoutes({ db, getPoller }) {
   const r = Router();
 
   // HTML dashboard (very minimal v1)
@@ -69,6 +69,18 @@ export function buildWebRoutes({ db }) {
       .prepare(`SELECT id, started_at, finished_at, items_fetched, items_new, error FROM poll_runs ORDER BY id DESC LIMIT 50`)
       .all();
     res.json({ rows });
+  });
+
+  r.post('/api/run-now', requireAdminPassword, async (_req, res) => {
+    const poller = getPoller?.();
+    if (!poller?.runNow) return res.status(503).json({ error: 'Poller not ready yet. Try again in a few seconds.' });
+
+    try {
+      const result = await poller.runNow();
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
   });
 
   return r;
@@ -145,6 +157,8 @@ function renderIndexHtml() {
     <div class="card">
       <h2>Recent poll runs</h2>
       <button onclick="loadPollRuns()">Refresh</button>
+      <button onclick="runNow()">Run now</button>
+      <div id="runNowStatus" class="small"></div>
       <pre id="pollRuns"></pre>
     </div>
   </div>
@@ -214,6 +228,21 @@ function renderIndexHtml() {
     const res = await fetch('/api/poll-runs', { headers: authHeader() });
     const data = await res.json();
     document.getElementById('pollRuns').textContent = res.ok ? JSON.stringify(data.rows, null, 2) : ('ERROR: ' + (data.error || res.status));
+  }
+
+  async function runNow() {
+    document.getElementById('runNowStatus').textContent = 'Running...';
+    const res = await fetch('/api/run-now', {
+      method: 'POST',
+      headers: { ...authHeader(), 'content-type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById('runNowStatus').textContent = 'ERROR: ' + (data.error || res.status);
+      return;
+    }
+    document.getElementById('runNowStatus').textContent = 'Done: fetched=' + (data.itemsFetched ?? '?') + ' newAttempts=' + (data.itemsNew ?? '?') + (data.error ? (' error=' + data.error) : '');
+    await loadPollRuns();
   }
 </script>
 </body>

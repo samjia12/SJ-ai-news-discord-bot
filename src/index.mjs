@@ -42,7 +42,7 @@ app.get('/health', (_req, res) => {
 
 import { buildWebRoutes } from './lib/web/routes.mjs';
 
-app.use('/', buildWebRoutes({ db }));
+app.use('/', buildWebRoutes({ db, getPoller: () => poller }));
 
 app.listen(PORT, () => {
   console.log(`[web] listening on http://0.0.0.0:${PORT}`);
@@ -51,8 +51,10 @@ app.listen(PORT, () => {
 const discord = startDiscordBot({ db });
 
 // Start RSS poller after Discord client is ready.
+let poller = null;
+
 discord.ready.then(() => {
-  startPoller({
+  poller = startPoller({
     db,
     discordSend: discord.send,
   });
