@@ -29,6 +29,8 @@ export function startDiscordBot({ db }) {
     // Register slash commands for allowlisted guilds (fast propagation).
     const commands = [
       new SlashCommandBuilder().setName('set_channel').setDescription('Bind this channel as the news posting channel (admins only).'),
+      new SlashCommandBuilder().setName('pause').setDescription('Pause posting in this server (admins only).'),
+      new SlashCommandBuilder().setName('resume').setDescription('Resume posting in this server (admins only).'),
       new SlashCommandBuilder().setName('status').setDescription('Show bot status for this server (read-only).'),
     ].map((c) => c.toJSON());
 
@@ -95,6 +97,23 @@ export function startDiscordBot({ db }) {
       return;
     }
 
+    if (interaction.commandName === 'pause' || interaction.commandName === 'resume') {
+      const member = interaction.member;
+      const perms = member?.permissions;
+      const isAdmin = perms && new PermissionsBitField(perms).has(PermissionsBitField.Flags.Administrator);
+
+      if (!isAdmin) {
+        await safeReply(interaction, `Permission denied: only server administrators can run /${interaction.commandName}.`, true);
+        return;
+      }
+
+      const enabled = interaction.commandName === 'resume' ? 1 : 0;
+      setGuildEnabled(db, { guildId, enabled });
+
+      await safeReply(interaction, enabled ? '✅ Resumed. I will post news again for this server.' : '⏸️ Paused. I will not post news for this server until you /resume.', true);
+      return;
+    }
+
     if (interaction.commandName === 'status') {
       const row = getGuild(db, guildId);
       const daily = getDailyCount(db, { guildId, date: todayUtcDate() });
@@ -151,6 +170,13 @@ function setGuildChannel(db, { guildId, channelId }) {
   db.prepare(
     `UPDATE guilds SET channel_id=?, updated_at=? WHERE guild_id=?`
   ).run(channelId, now, guildId);
+}
+
+function setGuildEnabled(db, { guildId, enabled }) {
+  const now = nowIso();
+  db.prepare(
+    `UPDATE guilds SET enabled=?, updated_at=? WHERE guild_id=?`
+  ).run(enabled, now, guildId);
 }
 
 function getGuild(db, guildId) {

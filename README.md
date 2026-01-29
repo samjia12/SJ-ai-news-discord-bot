@@ -8,7 +8,7 @@ A self-hosted, **multi-guild** Discord bot that pulls AI news from a fixed RSS s
 - **Output language:** configurable in the local dashboard (default: English)
 - **Per-guild daily cap:** 300 items
 - **Max output length:** 700 chars, appends ` (truncated)` if exceeded
-- **Discord commands:** `/set_channel`, `/status` (read-only)
+- **Discord commands:** `/set_channel`, `/pause`, `/resume`, `/status` (read-only)
 - **Allowlist:** only guilds listed in `ALLOWLIST_GUILD_IDS` are allowed
 
 ---

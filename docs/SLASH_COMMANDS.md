@@ -10,6 +10,23 @@
   - Save `channel_id` for this `guild_id` in SQLite
   - Reply ephemeral: success message
 
+## `/pause` (admins only)
+
+**Purpose:** pause posting for this guild.
+
+- Permission: **server administrators only**
+- Behavior:
+  - Set `guilds.enabled = 0`
+  - Poller will skip this guild until resumed
+
+## `/resume` (admins only)
+
+**Purpose:** resume posting for this guild.
+
+- Permission: **server administrators only**
+- Behavior:
+  - Set `guilds.enabled = 1`
+
 ## `/status` (read-only)
 
 **Purpose:** diagnostic status output.
