@@ -134,7 +134,7 @@ Check:
 - ✅ `bot`
 - ✅ `applications.commands`
 
-> `applications.commands` is required for `/set_channel` and `/status`.
+> `applications.commands` is required for `/set_channel`, `/pause`, `/resume`, and `/status`.
 
 #### 2.2 Bot permissions
 
@@ -195,7 +195,7 @@ docker compose up -d
 
 - Dashboard: http://localhost:3000
 
-Log in using `ADMIN_PASSWORD`.
+Authenticate using `ADMIN_PASSWORD`.
 
 ---
 
@@ -203,11 +203,16 @@ Log in using `ADMIN_PASSWORD`.
 
 In the dashboard:
 
-1. Select provider: OpenAI / DeepL / Claude (default OpenAI)
-2. Paste your API key
-3. Choose output language (default English)
-4. Save
-5. Use “Test translation” to verify
+1. Authenticate (Step 1: **Admin password → Save**)
+2. Select provider: OpenAI / DeepL / Claude (default OpenAI)
+3. Paste your API key
+4. Choose output language (default English)
+5. Click **Save**
+6. Use “Test translation” to verify
+
+Optional but recommended:
+- Use **Recent poll runs → Run now** to trigger an immediate run (no need to wait 20 minutes).
+- Use **Recent sends** to inspect recent successes/errors.
 
 **Copy/paste (logs)**
 
@@ -236,6 +241,7 @@ Run `/status` in any channel.
 It returns (ephemeral):
 - allowlist status
 - whether a channel is bound
+- enabled status (paused/resumed)
 - today’s sent count / 300
 - provider + output language
 - last poll time + last error (if any)
@@ -282,35 +288,14 @@ Quick checks:
 docker compose logs -f
 ```
 
+Common actions:
+- Pause posting: `/pause` (admins)
+- Resume posting: `/resume` (admins)
+- Trigger a run immediately: Dashboard → **Run now**
+
 ## More troubleshooting
 
 See: [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)
-
-### Bot posts nothing
-
-1. Check allowlist: is your guild in `ALLOWLIST_GUILD_IDS`?
-2. Run `/status` and confirm a channel is set.
-3. Ensure the bot has channel permissions:
-   - View Channel
-   - Send Messages
-
-### Slash commands don’t show up
-
-- Ensure the bot was invited with **applications.commands** scope.
-- Wait a minute (Discord command propagation can lag).
-
-### Translation fails
-
-- Verify your provider key in the dashboard.
-- Check container logs:
-
-```bash
-docker compose logs -f
-```
-
-### Hitting the daily cap
-
-- Per guild max is 300/day. `/status` shows usage.
 
 ---
 
@@ -347,6 +332,7 @@ MIT. See [LICENSE](./LICENSE).
 - 只把“翻译后的正文”发送到你用 `/set_channel` 绑定的 Discord 频道
 - 每个 guild 每天最多发送 300 条
 - 单条输出最多 700 字符，超过则追加 ` (truncated)`
+- 支持暂停/恢复（每个服务器单独开关）
 - 仅处理 Slash Command，不读取普通聊天内容
 
 注意：v1 **不发送来源链接**（不包含 `Source:`）。
@@ -384,6 +370,10 @@ MIT. See [LICENSE](./LICENSE).
 - Server Members Intent：**关闭**（不需要）
 - Presence Intent：**关闭**（不需要）
 
+为什么？
+- 本项目只接收 **Slash Command 的交互事件** 并向频道发消息。
+- 不会读取/解析普通聊天内容，所以不需要 Message Content intent。
+
 #### 1.3 邀请时的最小权限
 
 邀请 bot 进服务器时建议授予：
@@ -400,6 +390,8 @@ MIT. See [LICENSE](./LICENSE).
 - [ ] Intents 保持关闭（Message Content / Members / Presence）
 - [ ] 已准备好要写入 `ALLOWLIST_GUILD_IDS` 的服务器 ID
 
+---
+
 ### 2）邀请 bot 进入你的服务器
 
 在 Discord Developer Portal：
@@ -412,7 +404,7 @@ MIT. See [LICENSE](./LICENSE).
 - ✅ `bot`
 - ✅ `applications.commands`
 
-> `applications.commands` 是 `/set_channel` 和 `/status` 必需的。
+> `applications.commands` 是 `/set_channel`、`/pause`、`/resume`、`/status` 必需的。
 
 #### 2.2 Bot Permissions
 
@@ -437,6 +429,8 @@ Discord 桌面端：
 ```bash
 ALLOWLIST_GUILD_IDS=1437322703358136405
 ```
+
+---
 
 ### 3）用 Docker 启动
 
@@ -465,12 +459,23 @@ docker compose up -d
 docker compose logs -f
 ```
 
+---
+
 ### 4）在控制台填写翻译配置
 
-- 选择 provider（OpenAI/DeepL/Claude）
-- 填 API key
-- 选择输出语言（默认英文）
-- 保存，并用“Test translation”测试
+在控制台：
+
+1) 先在 Authenticate 输入 `ADMIN_PASSWORD` 并点击 Save
+2) 选择 provider（OpenAI/DeepL/Claude）
+3) 填 API key
+4) 选择输出语言（默认英文）
+5) 保存，并用 “Test translation” 测试
+
+可选但很推荐：
+- 用 “Poll runs → Run now” 立即触发一次运行（不用等 20 分钟）
+- 用 “Recent sends” 查看最近发送成功/失败原因
+
+---
 
 ### 5）在 Discord 里绑定推送频道
 
@@ -479,14 +484,24 @@ docker compose logs -f
 
 仅服务器管理员可执行。
 
+---
+
 ### 6）排错
 
 - 执行 `/status`（只读、ephemeral）查看：
   - 是否在 allowlist
   - 是否已绑定频道
+  - 是否启用（是否处于 pause）
   - 今日已发送条数 / 300
   - 当前 provider/语言
   - 最近一次拉取时间/最近错误
+
+常用操作：
+- 暂停推送：`/pause`（管理员）
+- 恢复推送：`/resume`（管理员）
+- 立即触发：控制台 Run now
+
+---
 
 ## 运维
 
