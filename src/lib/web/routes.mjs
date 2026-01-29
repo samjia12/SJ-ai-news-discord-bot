@@ -58,10 +58,33 @@ export function buildWebRoutes({ db, getPoller }) {
   });
 
   r.get('/api/guilds', requireAdminPassword, (_req, res) => {
+    const today = new Date().toISOString().slice(0, 10);
     const rows = db
-      .prepare(`SELECT guild_id, allowed, channel_id, enabled, updated_at FROM guilds ORDER BY updated_at DESC LIMIT 200`)
-      .all();
+      .prepare(
+        `SELECT g.guild_id, g.allowed, g.channel_id, g.enabled, g.updated_at,
+                COALESCE(d.sent_count, 0) AS sent_today
+         FROM guilds g
+         LEFT JOIN daily_counters d
+           ON d.guild_id = g.guild_id AND d.date = ?
+         ORDER BY g.updated_at DESC
+         LIMIT 200`
+      )
+      .all(today);
     res.json({ rows });
+  });
+
+  r.post('/api/guilds/:guildId/pause', requireAdminPassword, (req, res) => {
+    const guildId = String(req.params.guildId);
+    const now = nowIso();
+    db.prepare(`UPDATE guilds SET enabled=0, updated_at=? WHERE guild_id=?`).run(now, guildId);
+    res.json({ ok: true });
+  });
+
+  r.post('/api/guilds/:guildId/resume', requireAdminPassword, (req, res) => {
+    const guildId = String(req.params.guildId);
+    const now = nowIso();
+    db.prepare(`UPDATE guilds SET enabled=1, updated_at=? WHERE guild_id=?`).run(now, guildId);
+    res.json({ ok: true });
   });
 
   r.get('/api/poll-runs', requireAdminPassword, (_req, res) => {
@@ -150,8 +173,8 @@ function renderIndexHtml() {
     <div class="card">
       <h2>Guilds (seen)</h2>
       <button onclick="loadGuilds()">Refresh</button>
-      <pre id="guilds"></pre>
       <div class="small">A guild appears here after you run a slash command in it at least once.</div>
+      <pre id="guilds"></pre>
     </div>
 
     <div class="card">
@@ -221,7 +244,44 @@ function renderIndexHtml() {
   async function loadGuilds() {
     const res = await fetch('/api/guilds', { headers: authHeader() });
     const data = await res.json();
-    document.getElementById('guilds').textContent = res.ok ? JSON.stringify(data.rows, null, 2) : ('ERROR: ' + (data.error || res.status));
+    if (!res.ok) {
+      document.getElementById('guilds').textContent = 'ERROR: ' + (data.error || res.status);
+      return;
+    }
+
+    const rows = data.rows || [];
+    const lines = [];
+
+    for (const r of rows) {
+      const ch = r.channel_id ? ('<#' + r.channel_id + '>') : '(not set)';
+      const allowed = String(r.allowed) === '1' ? 'yes' : 'no';
+      const enabled = String(r.enabled) === '1' ? 'yes' : 'no';
+
+      lines.push(
+        'guild=' + r.guild_id +
+        ' allowed=' + allowed +
+        ' enabled=' + enabled +
+        ' sentToday=' + r.sent_today +
+        ' channel=' + ch
+      );
+      lines.push('  actions: pauseGuild(' + r.guild_id + '), resumeGuild(' + r.guild_id + ')');
+    }
+
+    document.getElementById('guilds').textContent = lines.join('\n');
+  }
+
+  async function pauseGuild(guildId) {
+    const res = await fetch('/api/guilds/' + guildId + '/pause', { method: 'POST', headers: { ...authHeader(), 'content-type': 'application/json' } });
+    const data = await res.json();
+    if (!res.ok) alert('Pause failed: ' + (data.error || res.status));
+    await loadGuilds();
+  }
+
+  async function resumeGuild(guildId) {
+    const res = await fetch('/api/guilds/' + guildId + '/resume', { method: 'POST', headers: { ...authHeader(), 'content-type': 'application/json' } });
+    const data = await res.json();
+    if (!res.ok) alert('Resume failed: ' + (data.error || res.status));
+    await loadGuilds();
   }
 
   async function loadPollRuns() {

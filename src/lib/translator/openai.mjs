@@ -27,9 +27,42 @@ export async function translateWithOpenAI({ apiKey, targetLang, text }) {
   }
 
   const data = await resp.json();
-  const out = data?.output_text;
-  if (!out) throw new Error('OpenAI returned empty output');
-  return String(out).trim();
+
+  // Prefer `output_text` when present.
+  const out1 = data?.output_text;
+  if (out1 && String(out1).trim()) return String(out1).trim();
+
+  // Fallback: extract text from output[].content[].text
+  const out2 = extractTextFromResponses(data);
+  if (out2 && out2.trim()) return out2.trim();
+
+  // If still empty, include a small JSON snippet for debugging.
+  const snippet = JSON.stringify({
+    id: data?.id,
+    model: data?.model,
+    output: Array.isArray(data?.output) ? data.output.slice(0, 2) : data?.output,
+  }).slice(0, 800);
+  throw new Error(`OpenAI returned empty output. Debug: ${snippet}`);
+}
+
+function extractTextFromResponses(data) {
+  try {
+    const outputs = Array.isArray(data?.output) ? data.output : [];
+    const texts = [];
+    for (const o of outputs) {
+      const content = Array.isArray(o?.content) ? o.content : [];
+      for (const c of content) {
+        if (c?.type === 'output_text' && typeof c?.text === 'string') {
+          texts.push(c.text);
+        } else if (typeof c?.text === 'string') {
+          texts.push(c.text);
+        }
+      }
+    }
+    return texts.join('').trim();
+  } catch {
+    return '';
+  }
 }
 
 async function safeText(resp) {
