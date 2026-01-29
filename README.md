@@ -254,11 +254,35 @@ It returns (ephemeral):
 
 #### Option A: Use the prebuilt image (recommended)
 
+The image is published by GitHub Actions to GHCR:
+- `ghcr.io/samjia12/sj-ai-news-discord-bot:latest`
+- also available: `ghcr.io/samjia12/sj-ai-news-discord-bot:sha-<gitsha>`
+
 ```bash
 # Pull latest image
 docker compose pull
 
+# Confirm the pulled image
+docker compose images
+
 # Start
+docker compose up -d
+```
+
+**Rollback / pin to a specific build**
+
+Edit `docker-compose.yml` and set the image tag to a specific sha tag, e.g.:
+
+```yaml
+services:
+  app:
+    image: ghcr.io/samjia12/sj-ai-news-discord-bot:sha-0123456789abcdef
+```
+
+Then pull + restart:
+
+```bash
+docker compose pull
 docker compose up -d
 ```
 
