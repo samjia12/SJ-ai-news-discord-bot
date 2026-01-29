@@ -1,6 +1,7 @@
 services:
   app:
-    image: sj-ai-news-discord-bot:dev
+    # Prefer the prebuilt image from GHCR. You can still build locally if you want.
+    image: ghcr.io/samjia12/sj-ai-news-discord-bot:latest
     build:
       context: .
       dockerfile: Dockerfile

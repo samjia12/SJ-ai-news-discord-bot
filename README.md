@@ -252,10 +252,29 @@ It returns (ephemeral):
 
 ### Common Docker commands
 
+#### Option A: Use the prebuilt image (recommended)
+
 ```bash
+# Pull latest image
+docker compose pull
+
 # Start
 docker compose up -d
+```
 
+#### Option B: Build locally
+
+```bash
+# Build
+docker compose build
+
+# Start
+docker compose up -d
+```
+
+Other useful ops:
+
+```bash
 # Status
 docker compose ps
 
