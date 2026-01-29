@@ -4,8 +4,23 @@ import { startDiscordBot } from './lib/discord/bot.mjs';
 import { startPoller } from './lib/scheduler/poller.mjs';
 import { openDb } from './lib/db/db.mjs';
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 const PORT = Number(process.env.PORT || 3000);
-const DB_PATH = process.env.DB_PATH || '/data/app.sqlite';
+let DB_PATH = process.env.DB_PATH || './data/app.sqlite';
+
+// Ensure parent dir exists for SQLite.
+// In local dev, users should use ./data/app.sqlite. In Docker, /data/app.sqlite is fine.
+try {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+} catch (e) {
+  // Fallback for cases where an absolute /data path is not writable/creatable on the host.
+  const fallback = './data/app.sqlite';
+  console.warn(`[db] failed to create directory for DB_PATH=${DB_PATH} (${e?.code || e}). Falling back to ${fallback}`);
+  DB_PATH = fallback;
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
 
 if (!process.env.ADMIN_PASSWORD) {
   console.error('Missing required env: ADMIN_PASSWORD');
