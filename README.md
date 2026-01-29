@@ -27,6 +27,7 @@ A self-hosted, **multi-guild** Discord bot that pulls AI news from a fixed RSS s
   - [6) Verify with `/status`](#6-verify-with-status)
 - [Operations](#operations)
 - [Troubleshooting](#troubleshooting)
+- [More troubleshooting](#more-troubleshooting)
 - [Security notes](#security-notes)
 - [License](#license)
 
@@ -92,6 +93,10 @@ So in **Bot → Privileged Gateway Intents**:
 - **Message Content Intent**: **OFF** (not needed)
 - **Server Members Intent**: **OFF** (not needed)
 - **Presence Intent**: **OFF**
+
+Why?
+- We only receive **slash command interactions** and send outbound messages.
+- We do **not** parse or read user chat messages, so Message Content intent is unnecessary.
 
 #### 1.3 Recommended server permissions (minimum)
 
@@ -262,6 +267,18 @@ Copy `data/app.sqlite` to back it up.
 ---
 
 ## Troubleshooting
+
+Quick checks:
+- Run `/status` (ephemeral) to confirm allowlist + channel binding + last error.
+- Check container logs:
+
+```bash
+docker compose logs -f
+```
+
+## More troubleshooting
+
+See: [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)
 
 ### Bot posts nothing
 
