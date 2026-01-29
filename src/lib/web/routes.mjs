@@ -174,7 +174,9 @@ function renderIndexHtml() {
       <h2>Guilds (seen)</h2>
       <button onclick="loadGuilds()">Refresh</button>
       <div class="small">A guild appears here after you run a slash command in it at least once.</div>
-      <pre id="guilds"></pre>
+
+      <div id="guildsTable"></div>
+      <pre id="guilds" style="display:none"></pre>
     </div>
 
     <div class="card">
@@ -190,6 +192,15 @@ function renderIndexHtml() {
   function authHeader() {
     const pw = localStorage.getItem('adminPw') || '';
     return { 'Authorization': 'Bearer ' + pw };
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function escapeAttr(s) {
+    // For simple quoted attributes (we only need to escape backslash and single quote here)
+    return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   }
 
   function savePw() {
@@ -244,30 +255,60 @@ function renderIndexHtml() {
   async function loadGuilds() {
     const res = await fetch('/api/guilds', { headers: authHeader() });
     const data = await res.json();
+    const el = document.getElementById('guildsTable');
+
     if (!res.ok) {
-      document.getElementById('guilds').textContent = 'ERROR: ' + (data.error || res.status);
+      el.innerHTML = '<div style="color:#b91c1c">ERROR: ' + escapeHtml(data.error || res.status) + '</div>';
       return;
     }
 
     const rows = data.rows || [];
-    const lines = [];
-
-    for (const r of rows) {
-      const ch = r.channel_id ? ('<#' + r.channel_id + '>') : '(not set)';
-      const allowed = String(r.allowed) === '1' ? 'yes' : 'no';
-      const enabled = String(r.enabled) === '1' ? 'yes' : 'no';
-
-      lines.push(
-        'guild=' + r.guild_id +
-        ' allowed=' + allowed +
-        ' enabled=' + enabled +
-        ' sentToday=' + r.sent_today +
-        ' channel=' + ch
-      );
-      lines.push('  actions: pauseGuild(' + r.guild_id + '), resumeGuild(' + r.guild_id + ')');
+    if (rows.length === 0) {
+      el.innerHTML = '<div class="small">No guilds seen yet. Run <code>/status</code> in your server once.</div>';
+      return;
     }
 
-    document.getElementById('guilds').textContent = lines.join('\n');
+    let html = '';
+    html += '<table style="width:100%; border-collapse: collapse">';
+    html += '<thead><tr>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Guild ID</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Allowed</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Enabled</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Today</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Channel ID</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Actions</th>' +
+    '</tr></thead>';
+
+    html += '<tbody>';
+    for (const r of rows) {
+      const allowed = String(r.allowed) === '1' ? 'yes' : 'no';
+      const enabled = String(r.enabled) === '1' ? 'yes' : 'no';
+      const enabledStyle = enabled === 'yes' ? 'color:#065f46' : 'color:#b45309';
+
+      html += '<tr>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><code>' + escapeHtml(r.guild_id) + '</code></td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9">' + escapeHtml(allowed) + '</td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9; ' + enabledStyle + '">' + escapeHtml(enabled) + '</td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9">' + escapeHtml(String(r.sent_today ?? 0)) + '/300</td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><code>' + escapeHtml(r.channel_id || '') + '</code></td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9">';
+
+      if (allowed === 'yes') {
+        if (enabled === 'yes') {
+          html += '<button onclick="pauseGuild(\'' + escapeAttr(r.guild_id) + '\')">Pause</button>';
+        } else {
+          html += '<button onclick="resumeGuild(\'' + escapeAttr(r.guild_id) + '\')">Resume</button>';
+        }
+      } else {
+        html += '<span class="small">(not allowlisted)</span>';
+      }
+
+      html += '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    el.innerHTML = html;
   }
 
   async function pauseGuild(guildId) {
