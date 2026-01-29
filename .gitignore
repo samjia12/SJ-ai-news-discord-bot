@@ -1,0 +1,33 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+/data/
+logs/
+out/
+inputs/
+state/
+memory/
+reports/
+
+# Local env
+.env
+
+# macOS
+.DS_Store
+
+# Workspace/assistant files (not part of the product)
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+prompts/
+scripts/
+tmp_1024ex_replies.json
+SJ-ai-news-discord-bot/
