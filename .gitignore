@@ -29,5 +29,7 @@ TOOLS.md
 USER.md
 prompts/
 scripts/
+!scripts/
+!scripts/x_monitor_1024ex.mjs
 tmp_1024ex_replies.json
 SJ-ai-news-discord-bot/
