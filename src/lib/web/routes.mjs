@@ -6,7 +6,7 @@ import { translateText } from '../translator/translator.mjs';
 export function buildWebRoutes({ db, getPoller }) {
   const r = Router();
 
-  // HTML dashboard (very minimal v1)
+  // HTML dashboard (minimal v1)
   r.get('/', (_req, res) => {
     res.type('html').send(renderIndexHtml());
   });
@@ -106,6 +106,33 @@ export function buildWebRoutes({ db, getPoller }) {
     }
   });
 
+  // Recent sends (success + error)
+  r.get('/api/sent-items', requireAdminPassword, (req, res) => {
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+    const guildId = req.query.guildId ? String(req.query.guildId) : null;
+
+    const rows = guildId
+      ? db
+          .prepare(
+            `SELECT guild_id, item_key, item_link, published_at, sent_at, status, error
+             FROM sent_items
+             WHERE guild_id = ?
+             ORDER BY id DESC
+             LIMIT ?`
+          )
+          .all(guildId, limit)
+      : db
+          .prepare(
+            `SELECT guild_id, item_key, item_link, published_at, sent_at, status, error
+             FROM sent_items
+             ORDER BY id DESC
+             LIMIT ?`
+          )
+          .all(limit);
+
+    res.json({ rows });
+  });
+
   return r;
 }
 
@@ -117,19 +144,20 @@ function renderIndexHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SJ AI News Discord Bot</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; max-width: 920px; margin: 0 auto; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; max-width: 980px; margin: 0 auto; }
     code, pre { background: #f6f8fa; padding: 2px 6px; border-radius: 6px; }
     pre { padding: 12px; overflow: auto; }
     .row { display: flex; gap: 16px; flex-wrap: wrap; }
     .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; flex: 1 1 360px; }
     input, select, textarea { width: 100%; padding: 8px; margin: 6px 0 12px; }
-    button { padding: 10px 14px; }
+    button { padding: 8px 12px; }
     .small { color: #6b7280; font-size: 13px; }
+    th { font-weight: 600; }
   </style>
 </head>
 <body>
   <h1>SJ AI News Discord Bot</h1>
-  <p class="small">This is a local dashboard. Authenticate using <code>ADMIN_PASSWORD</code>.</p>
+  <p class="small">Local dashboard. Authenticate using <code>ADMIN_PASSWORD</code>.</p>
 
   <div class="card">
     <h2>1) Authenticate</h2>
@@ -154,7 +182,7 @@ function renderIndexHtml() {
 
       <label>Output language</label>
       <input id="lang" value="en" />
-      <div class="small">Examples: <code>en</code>, <code>zh</code>, <code>ja</code>… (DeepL uses best-effort mapping).</div>
+      <div class="small">Examples: <code>en</code>, <code>zh</code>, <code>ja</code>…</div>
 
       <button onclick="loadConfig()">Load</button>
       <button onclick="saveConfig()">Save</button>
@@ -171,21 +199,37 @@ function renderIndexHtml() {
 
   <div class="row">
     <div class="card">
-      <h2>Guilds (seen)</h2>
+      <h2>Guilds</h2>
       <button onclick="loadGuilds()">Refresh</button>
       <div class="small">A guild appears here after you run a slash command in it at least once.</div>
-
       <div id="guildsTable"></div>
-      <pre id="guilds" style="display:none"></pre>
     </div>
 
     <div class="card">
-      <h2>Recent poll runs</h2>
+      <h2>Poll runs</h2>
       <button onclick="loadPollRuns()">Refresh</button>
       <button onclick="runNow()">Run now</button>
       <div id="runNowStatus" class="small"></div>
       <pre id="pollRuns"></pre>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Recent sends</h2>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex: 1 1 240px">
+        <label>Guild ID (optional)</label>
+        <input id="sentGuildId" placeholder="Filter by guild id" />
+      </div>
+      <div style="flex: 0 0 160px">
+        <label>Limit</label>
+        <input id="sentLimit" value="50" />
+      </div>
+      <div>
+        <button onclick="loadSentItems()">Refresh</button>
+      </div>
+    </div>
+    <div id="sentTable"></div>
   </div>
 
 <script>
@@ -199,7 +243,6 @@ function renderIndexHtml() {
   }
 
   function escapeAttr(s) {
-    // For simple quoted attributes (we only need to escape backslash and single quote here)
     return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   }
 
@@ -344,6 +387,53 @@ function renderIndexHtml() {
     }
     document.getElementById('runNowStatus').textContent = 'Done: fetched=' + (data.itemsFetched ?? '?') + ' newAttempts=' + (data.itemsNew ?? '?') + (data.error ? (' error=' + data.error) : '');
     await loadPollRuns();
+  }
+
+  async function loadSentItems() {
+    const guildId = document.getElementById('sentGuildId').value.trim();
+    const limit = document.getElementById('sentLimit').value.trim() || '50';
+    const qs = new URLSearchParams();
+    qs.set('limit', limit);
+    if (guildId) qs.set('guildId', guildId);
+
+    const res = await fetch('/api/sent-items?' + qs.toString(), { headers: authHeader() });
+    const data = await res.json();
+    const el = document.getElementById('sentTable');
+
+    if (!res.ok) {
+      el.innerHTML = '<div style="color:#b91c1c">ERROR: ' + escapeHtml(data.error || res.status) + '</div>';
+      return;
+    }
+
+    const rows = data.rows || [];
+    if (rows.length === 0) {
+      el.innerHTML = '<div class="small">No sends recorded yet.</div>';
+      return;
+    }
+
+    let html = '';
+    html += '<table style="width:100%; border-collapse: collapse">';
+    html += '<thead><tr>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Time</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Guild</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Status</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Error</th>' +
+    '</tr></thead>';
+
+    html += '<tbody>';
+    for (const r of rows) {
+      const status = String(r.status || '');
+      const statusStyle = status === 'ok' ? 'color:#065f46' : (status === 'error' ? 'color:#b91c1c' : 'color:#6b7280');
+      html += '<tr>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><code>' + escapeHtml(r.sent_at || '') + '</code></td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><code>' + escapeHtml(r.guild_id || '') + '</code></td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9; ' + statusStyle + '">' + escapeHtml(status) + '</td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9">' + escapeHtml(r.error || '') + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    el.innerHTML = html;
   }
 </script>
 </body>
