@@ -8,11 +8,11 @@ export function openDb(path) {
 }
 
 function migrate(db) {
-  // Simple migration strategy using PRAGMA user_version.
-  const v = db.pragma('user_version', { simple: true });
+  // We keep migrations intentionally robust: existing installs may already have tables
+  // but with missing columns (because CREATE TABLE IF NOT EXISTS won't add columns).
 
-  if (v < 1) {
-    db.exec(`
+  // Base tables (v1)
+  db.exec(`
     CREATE TABLE IF NOT EXISTS guilds (
       guild_id TEXT PRIMARY KEY,
       allowed INTEGER NOT NULL DEFAULT 0,
@@ -27,7 +27,6 @@ function migrate(db) {
       provider TEXT NOT NULL,
       api_key TEXT NOT NULL,
       output_language TEXT NOT NULL DEFAULT 'en',
-      fallback_on_error INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -62,21 +61,31 @@ function migrate(db) {
       items_new INTEGER NOT NULL,
       error TEXT NULL
     );
-    `);
+  `);
 
-    db.pragma('user_version = 1');
-    return;
+  // v2: secrets.fallback_on_error
+  ensureColumn(db, {
+    table: 'secrets',
+    column: 'fallback_on_error',
+    ddl: `ALTER TABLE secrets ADD COLUMN fallback_on_error INTEGER NOT NULL DEFAULT 1`,
+  });
+
+  // Bump user_version to indicate schema is at least v2.
+  try {
+    const v = db.pragma('user_version', { simple: true });
+    if (v < 2) db.pragma('user_version = 2');
+  } catch {
+    // ignore
   }
+}
 
-  // v1 -> v2 migrations (if needed)
-  if (v < 2) {
-    // Add fallback_on_error column to existing secrets table
-    try {
-      db.exec(`ALTER TABLE secrets ADD COLUMN fallback_on_error INTEGER NOT NULL DEFAULT 1`);
-    } catch {
-      // ignore if column already exists
-    }
-    db.pragma('user_version = 2');
+function ensureColumn(db, { table, column, ddl }) {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((r) => r.name);
+    if (cols.includes(column)) return;
+    db.exec(ddl);
+  } catch {
+    // ignore
   }
 }
 
