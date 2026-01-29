@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { startDiscordBot } from './lib/discord/bot.mjs';
+import { startPoller } from './lib/scheduler/poller.mjs';
 import { openDb } from './lib/db/db.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -43,4 +44,12 @@ app.listen(PORT, () => {
   console.log(`[web] listening on http://0.0.0.0:${PORT}`);
 });
 
-startDiscordBot({ db });
+const discord = startDiscordBot({ db });
+
+// Start RSS poller after Discord client is ready.
+discord.ready.then(() => {
+  startPoller({
+    db,
+    discordSend: discord.send,
+  });
+});

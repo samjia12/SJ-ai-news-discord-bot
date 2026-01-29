@@ -19,6 +19,10 @@ export function startDiscordBot({ db }) {
     intents: [GatewayIntentBits.Guilds],
   });
 
+  const ready = new Promise((resolve) => {
+    client.once('ready', () => resolve());
+  });
+
   client.once('ready', async () => {
     console.log(`[discord] logged in as ${client.user.tag}`);
 
@@ -117,6 +121,18 @@ export function startDiscordBot({ db }) {
   });
 
   client.login(process.env.DISCORD_BOT_TOKEN);
+
+  return {
+    client,
+    ready,
+    send: async ({ channelId, content }) => {
+      await ready;
+      const ch = await client.channels.fetch(channelId);
+      if (!ch || !('send' in ch)) throw new Error(`Cannot send to channel ${channelId}`);
+      // @ts-ignore
+      await ch.send({ content });
+    },
+  };
 }
 
 function upsertGuild(db, { guildId, allowed }) {
