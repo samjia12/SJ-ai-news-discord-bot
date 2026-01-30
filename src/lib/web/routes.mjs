@@ -2,9 +2,6 @@ import { Router } from 'express';
 import { requireAdminPassword } from './auth.mjs';
 import { nowIso } from '../db/db.mjs';
 import { translateText } from '../translator/translator.mjs';
-import { TASK_META } from './task_meta.mjs';
-import { renderTasksHtml } from './tasks_html.mjs';
-import { readCronJobsSafe, readAllCronRunsSafe, decorateJob, decorateRun, buildWeekView } from './tasks_utils.mjs';
 
 export function buildWebRoutes({ db, getPoller }) {
   const r = Router();
@@ -136,53 +133,6 @@ export function buildWebRoutes({ db, getPoller }) {
           .all(limit);
 
     res.json({ rows });
-  });
-
-  // ------------------------------
-  // Tasks dashboard (Clawdbot cron)
-  // ------------------------------
-
-  r.get('/tasks', (_req, res) => {
-    res.type('html').send(renderTasksHtml());
-  });
-
-  r.get('/api/tasks/jobs', requireAdminPassword, (_req, res) => {
-    const jobs = readCronJobsSafe();
-    const decorated = (jobs.jobs || []).map((j) => decorateJob(j));
-    res.json({ ok: jobs.ok, error: jobs.error, path: jobs.path, jobs: decorated });
-  });
-
-  r.get('/api/tasks/runs', requireAdminPassword, (req, res) => {
-    const limit = Math.max(1, Math.min(500, Number(req.query.limit || 100)));
-    const type = req.query.type ? String(req.query.type) : 'all'; // all|work|life
-    const status = req.query.status ? String(req.query.status) : 'all'; // all|ok|error|skipped
-    const jobId = req.query.jobId ? String(req.query.jobId) : null;
-
-    const jobs = readCronJobsSafe();
-    const jobMap = new Map((jobs.jobs || []).map((j) => [String(j.id), j]));
-
-    const rows = readAllCronRunsSafe({ limit, jobId });
-    const filtered = rows
-      .map((r) => decorateRun(r, jobMap))
-      .filter((r) => {
-        if (type !== 'all' && r.type !== type) return false;
-        if (status !== 'all' && String(r.status) !== status) return false;
-        return true;
-      });
-
-    res.json({ ok: true, rows: filtered.slice(0, limit) });
-  });
-
-  // For week view: return events for the next 7 days in Asia/Hong_Kong.
-  r.get('/api/tasks/week', requireAdminPassword, (req, res) => {
-    const baseIso = req.query.baseDate ? String(req.query.baseDate) : null; // YYYY-MM-DD
-    const type = req.query.type ? String(req.query.type) : 'all';
-
-    const jobs = readCronJobsSafe();
-    const out = buildWeekView({ jobs: jobs.jobs || [], baseIso });
-    const filtered = out.events.filter((e) => (type === 'all' ? true : e.type === type));
-
-    res.json({ ok: true, tz: 'Asia/Hong_Kong', baseDate: out.baseDate, range: out.range, events: filtered, highFreq: out.highFreq });
   });
 
   return r;
