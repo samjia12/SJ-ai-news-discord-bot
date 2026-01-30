@@ -4,7 +4,7 @@ import { nowIso } from '../db/db.mjs';
 import { translateText } from '../translator/translator.mjs';
 import { TASK_META } from './task_meta.mjs';
 import { renderTasksHtml } from './tasks_html.mjs';
-import { readCronJobsSafe, readAllCronRunsSafe, decorateJob, decorateRun, buildWeekView } from './tasks_utils.mjs';
+import { readCronJobsSafe, readAllCronRunsSafe, readCronRunsSinceMs, decorateJob, decorateRun, buildWeekView } from './tasks_utils.mjs';
 
 export function buildWebRoutes({ db, getPoller }) {
   const r = Router();
@@ -179,10 +179,17 @@ export function buildWebRoutes({ db, getPoller }) {
     const type = req.query.type ? String(req.query.type) : 'all';
 
     const jobs = readCronJobsSafe();
-    const out = buildWeekView({ jobs: jobs.jobs || [], baseIso });
+
+    // Pull recent runs (bounded) to compute high-frequency per-day stats.
+    const now = Date.now();
+    const sinceMs = now - 9 * 24 * 3600 * 1000; // 9 days buffer for week view
+    const hfIds = (jobs.jobs || []).filter((j) => j?.enabled && j?.schedule?.kind === 'every').map((j) => String(j.id));
+    const runs = readCronRunsSinceMs({ sinceMs, jobIds: hfIds, maxLinesPerFile: 3000 });
+
+    const out = buildWeekView({ jobs: jobs.jobs || [], baseIso, runs });
     const filtered = out.events.filter((e) => (type === 'all' ? true : e.type === type));
 
-    res.json({ ok: true, tz: 'Asia/Hong_Kong', baseDate: out.baseDate, range: out.range, events: filtered, highFreq: out.highFreq });
+    res.json({ ok: true, tz: 'Asia/Hong_Kong', baseDate: out.baseDate, range: out.range, events: filtered, highFreq: out.highFreq, highFreqStats: out.highFreqStats });
   });
 
   return r;
