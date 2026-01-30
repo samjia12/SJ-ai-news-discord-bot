@@ -3,6 +3,10 @@ import { requireAdminPassword } from './auth.mjs';
 import { nowIso } from '../db/db.mjs';
 import { translateText } from '../translator/translator.mjs';
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 export function buildWebRoutes({ db, getPoller }) {
   const r = Router();
 
@@ -135,7 +139,152 @@ export function buildWebRoutes({ db, getPoller }) {
     res.json({ rows });
   });
 
+  // --- Clawdbot Cron Dashboard API (file-backed) ---
+  // These endpoints read/modify ~/.clawdbot/cron/jobs.json and run history jsonl.
+
+  r.get('/api/cron/jobs', requireAdminPassword, (_req, res) => {
+    const data = readCronJobsSafe();
+    res.json(data);
+  });
+
+  r.get('/api/cron/runs/:jobId', requireAdminPassword, (req, res) => {
+    const jobId = String(req.params.jobId);
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+    const data = readCronRunsSafe(jobId, limit);
+    res.json(data);
+  });
+
+  r.post('/api/cron/jobs/:jobId/enable', requireAdminPassword, (req, res) => {
+    const jobId = String(req.params.jobId);
+    const out = patchCronJob(jobId, (job) => {
+      job.enabled = true;
+      return job;
+    });
+    res.json(out);
+  });
+
+  r.post('/api/cron/jobs/:jobId/disable', requireAdminPassword, (req, res) => {
+    const jobId = String(req.params.jobId);
+    const out = patchCronJob(jobId, (job) => {
+      job.enabled = false;
+      return job;
+    });
+    res.json(out);
+  });
+
+  r.delete('/api/cron/jobs/:jobId', requireAdminPassword, (req, res) => {
+    const jobId = String(req.params.jobId);
+    const out = deleteCronJob(jobId);
+    res.json(out);
+  });
+
+  r.post('/api/cron/run/:jobId', requireAdminPassword, async (req, res) => {
+    // Best-effort manual trigger. Requires `clawdbot` to be installed on the host.
+    const jobId = String(req.params.jobId);
+    const timeoutMs = Math.max(1000, Math.min(600000, Number(req.body?.timeoutMs || 30000)));
+    try {
+      const { execFile } = await import('node:child_process');
+      const { promisify } = await import('node:util');
+      const pexec = promisify(execFile);
+      const { stdout, stderr } = await pexec('clawdbot', ['cron', 'run', jobId, '--force', '--timeout', String(timeoutMs)], {
+        timeout: timeoutMs + 2000,
+      });
+      res.json({ ok: true, stdout, stderr });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
   return r;
+}
+
+function cronBaseDir() {
+  return path.join(os.homedir(), '.clawdbot', 'cron');
+}
+
+function cronJobsPath() {
+  return path.join(cronBaseDir(), 'jobs.json');
+}
+
+function cronRunsDir() {
+  return path.join(cronBaseDir(), 'runs');
+}
+
+function readCronJobsSafe() {
+  try {
+    const p = cronJobsPath();
+    const raw = fs.readFileSync(p, 'utf8');
+    const json = JSON.parse(raw);
+    const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
+    return { ok: true, path: p, count: jobs.length, jobs };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), count: 0, jobs: [] };
+  }
+}
+
+function readCronRunsSafe(jobId, limit) {
+  try {
+    const p = path.join(cronRunsDir(), `${jobId}.jsonl`);
+    if (!fs.existsSync(p)) return { ok: true, path: p, rows: [] };
+    const lines = fs.readFileSync(p, 'utf8').split('\n').filter(Boolean);
+    const tail = lines.slice(-limit);
+    const rows = tail
+      .map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    return { ok: true, path: p, rows };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), rows: [] };
+  }
+}
+
+function writeJsonAtomic(filePath, obj) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+  fs.renameSync(tmp, filePath);
+}
+
+function patchCronJob(jobId, mutator) {
+  try {
+    const p = cronJobsPath();
+    const raw = fs.readFileSync(p, 'utf8');
+    const json = JSON.parse(raw);
+    const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
+    const idx = jobs.findIndex((j) => String(j?.id) === jobId);
+    if (idx < 0) return { ok: false, error: `job not found: ${jobId}` };
+
+    const next = mutator({ ...jobs[idx] });
+    jobs[idx] = next;
+    json.jobs = jobs;
+    writeJsonAtomic(p, json);
+
+    return { ok: true, updated: true, jobId };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+function deleteCronJob(jobId) {
+  try {
+    const p = cronJobsPath();
+    const raw = fs.readFileSync(p, 'utf8');
+    const json = JSON.parse(raw);
+    const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
+    const before = jobs.length;
+    const afterJobs = jobs.filter((j) => String(j?.id) !== jobId);
+    if (afterJobs.length === before) return { ok: false, error: `job not found: ${jobId}` };
+    json.jobs = afterJobs;
+    writeJsonAtomic(p, json);
+    return { ok: true, removed: true, jobId };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
 }
 
 function renderIndexHtml() {
@@ -238,6 +387,36 @@ function renderIndexHtml() {
       </div>
     </div>
     <div id="sentTable"></div>
+  </div>
+
+  <div class="card">
+    <h2>Clawdbot Cron dashboard</h2>
+    <div class="small">Reads from <code>~/.clawdbot/cron/jobs.json</code> and <code>~/.clawdbot/cron/runs/*.jsonl</code> on this machine.</div>
+    <div class="row" style="align-items:flex-end">
+      <div>
+        <button onclick="loadCronJobs()">Refresh jobs</button>
+      </div>
+      <div class="small" id="cronJobsStatus"></div>
+    </div>
+
+    <div id="cronJobsTable"></div>
+
+    <div style="margin-top:12px">
+      <h3 style="margin: 12px 0 6px">Selected job runs</h3>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex: 1 1 360px">
+          <input id="cronSelectedJobId" placeholder="Click a job row to load runs..." />
+        </div>
+        <div style="flex: 0 0 160px">
+          <input id="cronRunsLimit" value="50" />
+          <div class="small">runs limit</div>
+        </div>
+        <div>
+          <button onclick="loadCronRuns()">Load runs</button>
+        </div>
+      </div>
+      <pre id="cronRunsOut"></pre>
+    </div>
   </div>
 
 <script>
@@ -444,6 +623,125 @@ function renderIndexHtml() {
     html += '</tbody></table>';
 
     el.innerHTML = html;
+  }
+
+  async function loadCronJobs() {
+    const statusEl = document.getElementById('cronJobsStatus');
+    statusEl.textContent = 'Loading…';
+
+    const res = await fetch('/api/cron/jobs', { headers: authHeader() });
+    const data = await res.json();
+    const el = document.getElementById('cronJobsTable');
+
+    if (!res.ok || !data.ok) {
+      statusEl.textContent = 'ERROR';
+      el.innerHTML = '<div style="color:#b91c1c">ERROR: ' + escapeHtml(data.error || res.status) + '</div>';
+      return;
+    }
+
+    statusEl.textContent = 'Loaded ' + (data.count ?? (data.jobs || []).length) + ' jobs';
+
+    const jobs = data.jobs || [];
+    if (jobs.length === 0) {
+      el.innerHTML = '<div class="small">No cron jobs found.</div>';
+      return;
+    }
+
+    jobs.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+    let html = '';
+    html += '<table style="width:100%; border-collapse: collapse">';
+    html += '<thead><tr>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Name</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Schedule</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Enabled</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Last</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Next</th>' +
+      '<th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px">Actions</th>' +
+    '</tr></thead>';
+
+    html += '<tbody>';
+    for (const j of jobs) {
+      const id = String(j.id || '');
+      const enabled = !!j.enabled;
+      const sched = j.schedule ? (j.schedule.kind + ':' + (j.schedule.expr || '') + ' ' + (j.schedule.tz || '')) : '';
+      const last = j.state?.lastRunAtMs ? new Date(j.state.lastRunAtMs).toISOString() : '';
+      const next = j.state?.nextRunAtMs ? new Date(j.state.nextRunAtMs).toISOString() : '';
+
+      const enabledHtml = enabled ? '<span style="color:#065f46">yes</span>' : '<span style="color:#b91c1c">no</span>';
+
+      html += '<tr onclick="selectCronJob(\'' + escapeAttr(id) + '\')" style="cursor:pointer">';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><div><strong>' + escapeHtml(j.name || id) + '</strong></div><div class="small"><code>' + escapeHtml(id) + '</code></div></td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><code>' + escapeHtml(sched) + '</code></td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9">' + enabledHtml + '</td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><code>' + escapeHtml(last) + '</code><div class="small">' + escapeHtml(j.state?.lastStatus || '') + '</div></td>';
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9"><code>' + escapeHtml(next) + '</code></td>';
+
+      const btnEnable = enabled
+        ? '<button onclick="event.stopPropagation(); disableCronJob(\'' + escapeAttr(id) + '\')">Disable</button>'
+        : '<button onclick="event.stopPropagation(); enableCronJob(\'' + escapeAttr(id) + '\')">Enable</button>';
+
+      html += '<td style="padding:6px; border-bottom:1px solid #f1f5f9; white-space:nowrap">' +
+        '<button onclick="event.stopPropagation(); runCronJob(\'' + escapeAttr(id) + '\')">Run</button> ' +
+        btnEnable + ' ' +
+        '<button onclick="event.stopPropagation(); deleteCronJob(\'' + escapeAttr(id) + '\')" style="color:#b91c1c">Delete</button>' +
+      '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    el.innerHTML = html;
+  }
+
+  function selectCronJob(jobId) {
+    document.getElementById('cronSelectedJobId').value = jobId;
+    loadCronRuns();
+  }
+
+  async function loadCronRuns() {
+    const jobId = document.getElementById('cronSelectedJobId').value.trim();
+    const limit = document.getElementById('cronRunsLimit').value.trim() || '50';
+    const out = document.getElementById('cronRunsOut');
+    if (!jobId) {
+      out.textContent = 'Pick a job first.';
+      return;
+    }
+
+    out.textContent = 'Loading…';
+    const res = await fetch('/api/cron/runs/' + encodeURIComponent(jobId) + '?limit=' + encodeURIComponent(limit), { headers: authHeader() });
+    const data = await res.json();
+    out.textContent = res.ok ? JSON.stringify(data.rows || [], null, 2) : ('ERROR: ' + (data.error || res.status));
+  }
+
+  async function enableCronJob(jobId) {
+    await fetch('/api/cron/jobs/' + encodeURIComponent(jobId) + '/enable', { method: 'POST', headers: authHeader() });
+    await loadCronJobs();
+  }
+
+  async function disableCronJob(jobId) {
+    await fetch('/api/cron/jobs/' + encodeURIComponent(jobId) + '/disable', { method: 'POST', headers: authHeader() });
+    await loadCronJobs();
+  }
+
+  async function deleteCronJob(jobId) {
+    if (!confirm('Delete job ' + jobId + '? This cannot be undone.')) return;
+    const res = await fetch('/api/cron/jobs/' + encodeURIComponent(jobId), { method: 'DELETE', headers: authHeader() });
+    const data = await res.json();
+    if (!res.ok || !data.ok) alert('Delete failed: ' + (data.error || res.status));
+    await loadCronJobs();
+  }
+
+  async function runCronJob(jobId) {
+    const out = document.getElementById('cronRunsOut');
+    out.textContent = 'Triggering…';
+    const res = await fetch('/api/cron/run/' + encodeURIComponent(jobId), {
+      method: 'POST',
+      headers: { ...authHeader(), 'content-type': 'application/json' },
+      body: JSON.stringify({ timeoutMs: 30000 }),
+    });
+    const data = await res.json();
+    out.textContent = res.ok ? (data.stdout || '(no stdout)') : ('ERROR: ' + (data.error || res.status));
+    await loadCronJobs();
   }
 </script>
 </body>
