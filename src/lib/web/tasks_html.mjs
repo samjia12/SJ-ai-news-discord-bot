@@ -122,42 +122,8 @@ export function renderTasksHtml() {
 
     html += '<div class="weekGrid" style="margin-top:10px">';
     html += '<div></div>';
-    const hfStats = data.highFreqStats || {};
-    const hfList = data.highFreq || [];
-
     for(const d of days){
       html += '<div class="cell"><div class="dayTitle">' + esc(d) + '</div>';
-
-      // High-frequency daily stats banner
-      if (hfList.length > 0) {
-        html += '<div class="small" style="margin:6px 0 8px">High-frequency runs</div>';
-        for (const hf of hfList) {
-          const s = (hfStats[hf.jobId] && hfStats[hf.jobId][d]) ? hfStats[hf.jobId][d] : null;
-          const total = s ? s.total : 0;
-          const ok = s ? s.ok : 0;
-          const err = s ? s.error : 0;
-          const skip = s ? s.skipped : 0;
-          const sentYes = s ? s.sentYes : 0;
-          const sentNo = s ? s.sentNo : 0;
-
-          // Simple density bar
-          const denom = Math.max(1, total);
-          const okPct = Math.round((ok / denom) * 100);
-          const errPct = Math.round((err / denom) * 100);
-          const skipPct = Math.max(0, 100 - okPct - errPct);
-
-          html += '<div style="margin:6px 0">';
-          html += '<div class="small"><span class="pill ' + esc(hf.type) + '">' + esc(hf.type) + '</span> <strong>' + esc(hf.title) + '</strong></div>';
-          html += '<div style="height:8px; background:#f3f4f6; border-radius:999px; overflow:hidden; margin-top:4px">' +
-            '<div style="height:8px; width:' + okPct + '%; background:#10b981; float:left"></div>' +
-            '<div style="height:8px; width:' + errPct + '%; background:#ef4444; float:left"></div>' +
-            '<div style="height:8px; width:' + skipPct + '%; background:#f59e0b; float:left"></div>' +
-          '</div>';
-          html += '<div class="small">runs: ' + total + ' (ok ' + ok + ', err ' + err + ', skip ' + skip + ') · sent: ' + sentYes + ' / no: ' + sentNo + '</div>';
-          html += '</div>';
-        }
-      }
-
       const items = byDay[d] || [];
       if(items.length===0) html += '<div class="small">No scheduled items</div>';
       for(const e of items){
@@ -214,53 +180,7 @@ export function renderTasksHtml() {
       return;
     }
 
-    // Alerts summary (last N rows returned)
-    let okC=0, errC=0, skipC=0, sentY=0, sentN=0, sentU=0;
-    let execFail=0, kindSkip=0;
-    const byJob = new Map();
-    for (const r of rows) {
-      if (r.status === 'ok') okC++;
-      else if (r.status === 'error') errC++;
-      else if (r.status === 'skipped') skipC++;
-
-      if (r.sent === true) sentY++;
-      else if (r.sent === false) sentN++;
-      else sentU++;
-
-      const s = String(r.summary || '');
-      if (/Exec:|exec failed|MODULE_NOT_FOUND|command not found|Cannot find module/i.test(s)) execFail++;
-      if (/requires payload\.kind=agentTurn/i.test(s)) kindSkip++;
-
-      const k = r.jobId;
-      const cur = byJob.get(k) || { title: r.title || k, error:0, skipped:0 };
-      if (r.status === 'error') cur.error++;
-      if (r.status === 'skipped') cur.skipped++;
-      byJob.set(k, cur);
-    }
-
-    const topProblems = Array.from(byJob.entries())
-      .map(([jobId,v]) => ({ jobId, title:v.title, bad: v.error + v.skipped, error:v.error, skipped:v.skipped }))
-      .filter(x => x.bad > 0)
-      .sort((a,b) => b.bad - a.bad)
-      .slice(0, 5);
-
-    let alertHtml = '';
-    if (errC + skipC > 0) {
-      alertHtml += '<div style="border:1px solid #fecaca; background:#fef2f2; padding:10px; border-radius:10px; margin:10px 0">';
-      alertHtml += '<div><strong>Alerts</strong> <span class="small">(based on current filter window)</span></div>';
-      alertHtml += '<div class="small">errors: ' + errC + ' · skipped: ' + skipC + ' · exec-failed: ' + execFail + ' · kind(agentTurn) skipped: ' + kindSkip + '</div>';
-      if (topProblems.length) {
-        alertHtml += '<div class="small" style="margin-top:6px"><strong>Top problematic tasks:</strong><br/>' +
-          topProblems.map(p => esc(p.title) + ' (' + esc(p.jobId) + ') — bad ' + p.bad + ' (err ' + p.error + ', skip ' + p.skipped + ')').join('<br/>') +
-        '</div>';
-      }
-      alertHtml += '</div>';
-    }
-
     let t = '';
-    t += alertHtml;
-    t += '<div class="small">Totals: ok ' + okC + ' · error ' + errC + ' · skipped ' + skipC + ' · sent ' + sentY + ' · no ' + sentN + ' · ? ' + sentU + '</div>';
-
     t += '<table><thead><tr>' +
       '<th>Time (UTC+8)</th><th>Task</th><th>Type</th><th>Status</th><th>Sent</th><th>Targets</th><th>Duration</th><th>Summary</th>' +
     '</tr></thead><tbody>';

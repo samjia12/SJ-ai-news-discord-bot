@@ -61,48 +61,6 @@ export function readAllCronRunsSafe({ limit, jobId } = {}) {
   }
 }
 
-// Read runs for selected jobIds within a time window.
-// This avoids the gateway cron RPC and is bounded by maxLinesPerFile.
-export function readCronRunsSinceMs({ sinceMs, jobIds, maxLinesPerFile = 5000 }) {
-  const out = [];
-  const want = jobIds ? new Set(jobIds.map(String)) : null;
-  try {
-    const dir = cronRunsDir();
-    if (!fs.existsSync(dir)) return out;
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
-
-    for (const f of files) {
-      const jobId = f.replace(/\.jsonl$/, '');
-      if (want && !want.has(jobId)) continue;
-
-      const fp = path.join(dir, f);
-      let lines = [];
-      try {
-        lines = fs.readFileSync(fp, 'utf8').split('\n').filter(Boolean);
-      } catch {
-        continue;
-      }
-
-      const tail = lines.slice(-maxLinesPerFile);
-      for (const line of tail) {
-        try {
-          const j = JSON.parse(line);
-          const t = Number(j.runAtMs || j.ts || 0);
-          if (sinceMs && t && t < sinceMs) continue;
-          out.push(j);
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    out.sort((a, b) => Number(b.runAtMs || b.ts || 0) - Number(a.runAtMs || a.ts || 0));
-    return out;
-  } catch {
-    return out;
-  }
-}
-
 export function decorateJob(job) {
   const id = String(job?.id || '');
   const meta = TASK_META[id] || {};
@@ -302,7 +260,7 @@ function scheduleEventsForWeek(job, baseDateYmd) {
   return { highFreq: true, events: [] };
 }
 
-export function buildWeekView({ jobs, baseIso, runs = [] }) {
+export function buildWeekView({ jobs, baseIso }) {
   // baseIso is YYYY-MM-DD; default to current week's Monday in Asia/Hong_Kong.
   let baseDate;
   if (baseIso && /^\d{4}-\d{2}-\d{2}$/.test(baseIso)) {
@@ -337,45 +295,10 @@ export function buildWeekView({ jobs, baseIso, runs = [] }) {
     events.push(...r.events);
   }
 
-  // High-frequency daily stats (counts per day): total/ok/error/skipped and sent yes/no.
-  const jobMap = new Map((jobs || []).map((j) => [String(j.id), j]));
-  const highFreqStats = {};
-
-  for (const hf of highFreq) {
-    highFreqStats[hf.jobId] = {};
-    for (const d of days) {
-      highFreqStats[hf.jobId][d] = { total: 0, ok: 0, error: 0, skipped: 0, sentYes: 0, sentNo: 0, sentUnknown: 0 };
-    }
-  }
-
-  for (const r of runs) {
-    const jobId = String(r.jobId || '');
-    if (!highFreqStats[jobId]) continue;
-    const whenMs = Number(r.runAtMs || r.ts || 0);
-    if (!whenMs) continue;
-    const d = hktYmd(new Date(whenMs));
-    if (!highFreqStats[jobId][d]) continue;
-
-    const status = String(r.status || r.lastStatus || '').toLowerCase();
-    const summary = r.summary || r.error || '';
-    const sent = inferSent(summary, status);
-
-    const cell = highFreqStats[jobId][d];
-    cell.total += 1;
-    if (status === 'ok') cell.ok += 1;
-    else if (status === 'error') cell.error += 1;
-    else if (status === 'skipped') cell.skipped += 1;
-
-    if (sent === true) cell.sentYes += 1;
-    else if (sent === false) cell.sentNo += 1;
-    else cell.sentUnknown += 1;
-  }
-
   return {
     baseDate,
     range: { days, endDate: days[6] },
     highFreq,
-    highFreqStats,
     events,
   };
 }
